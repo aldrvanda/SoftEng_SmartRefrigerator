@@ -1,0 +1,11 @@
+# Mengabaikan folder instalasi library
+node_modules/
+
+# Mengabaikan folder build dan cache Next.js
+.next/
+out/
+build/
+
+# Mengabaikan file environment variable (keamanan)
+.env*.local
+.env

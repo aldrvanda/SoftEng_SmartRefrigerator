@@ -1,0 +1,52 @@
+@import url('https://fonts.googleapis.com/css2?family=Rammetto+One&family=Poppins:wght@300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-cream: #f5f2e8;
+  --color-cream-dark: #ede9d6;
+  --color-sage-300: #adc491;
+  --color-sage-500: #6b8f4a;
+  --color-sage-600: #4f6d35;
+  --color-sage-700: #3d5429;
+  --color-warm-dark: #1a1a14;
+  --color-expired: #dc2626;
+  --color-almost: #d97706;
+  --color-safe: #4f6d35;
+}
+
+* { box-sizing: border-box; padding: 0; margin: 0; }
+
+html, body {
+  max-width: 100vw;
+  overflow-x: hidden;
+  font-family: 'Poppins', sans-serif;
+  background-color: var(--color-cream);
+  color: var(--color-warm-dark);
+}
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--color-cream-dark); }
+::-webkit-scrollbar-thumb { background: var(--color-sage-300); border-radius: 3px; }
+
+.stagger-1 { animation-delay: 0.05s; }
+.stagger-2 { animation-delay: 0.10s; }
+.stagger-3 { animation-delay: 0.15s; }
+.stagger-4 { animation-delay: 0.20s; }
+.stagger-5 { animation-delay: 0.25s; }
+.stagger-6 { animation-delay: 0.30s; }
+
+.animate-fade-in { opacity: 0; animation: fadeIn 0.4s ease forwards; }
+.animate-slide-up { opacity: 0; animation: slideUp 0.4s ease forwards; }
+
+@keyframes fadeIn { to { opacity: 1; } }
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.badge-expired { background:#fee2e2; color:#dc2626; font-size:0.7rem; font-weight:600; padding:2px 8px; border-radius:9999px; letter-spacing:0.04em; text-transform:uppercase; font-family:'Poppins',sans-serif; }
+.badge-almost  { background:#fef3c7; color:#d97706; font-size:0.7rem; font-weight:600; padding:2px 8px; border-radius:9999px; letter-spacing:0.04em; text-transform:uppercase; font-family:'Poppins',sans-serif; }
+.badge-safe    { background:#dcfce7; color:#16a34a; font-size:0.7rem; font-weight:600; padding:2px 8px; border-radius:9999px; letter-spacing:0.04em; text-transform:uppercase; font-family:'Poppins',sans-serif; }
