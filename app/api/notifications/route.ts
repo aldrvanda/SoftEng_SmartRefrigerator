@@ -10,6 +10,18 @@ async function getSessionUser() {
   return await sessions?.findOne({ token, expiresAt: { $gt: new Date() } }) ?? null
 }
 
+// Shared helper — parses "YYYY-MM-DD" as local date (no timezone shift)
+function parseDateLocal(dateStr: string): Date {
+  const parts = String(dateStr).split('-')
+  return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]))
+}
+
+// Matches dashboard: d < 0 → expired, d <= 3 → almost, else safe
+function calcDaysLeft(dateStr: string, now: Date): number {
+  const exp = parseDateLocal(dateStr)
+  return Math.ceil((exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+}
+
 export async function GET() {
   try {
     const session = await getSessionUser()
@@ -25,12 +37,11 @@ export async function GET() {
 
     // Upsert auto-notifications — preserves existing read state via $setOnInsert
     for (const item of items) {
-      const parts = String(item.expirationDate).split('-')
-      const exp = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]))
-      const daysLeft = Math.ceil((exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+      const daysLeft = calcDaysLeft(item.expirationDate, now)
       const autoId = `auto_${item._id}`
 
       if (daysLeft < 0) {
+        // Already expired
         await notifCol?.updateOne(
           { _id: autoId, userId: session.userId },
           {
@@ -45,8 +56,12 @@ export async function GET() {
           },
           { upsert: true }
         )
-      } else if (daysLeft <= 2) {
-        const when = daysLeft === 0 ? 'today' : daysLeft === 1 ? 'tomorrow' : `in ${daysLeft} days`
+      } else if (daysLeft <= 3) {
+        // Expiring soon — threshold matches dashboard (d <= 3)
+        const when =
+          daysLeft === 0 ? 'today' :
+          daysLeft === 1 ? 'tomorrow' :
+          `in ${daysLeft} days`
         await notifCol?.updateOne(
           { _id: autoId, userId: session.userId },
           {

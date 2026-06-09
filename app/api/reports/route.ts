@@ -10,6 +10,18 @@ async function getSessionUser() {
   return await sessions?.findOne({ token, expiresAt: { $gt: new Date() } }) ?? null
 }
 
+// Parses "YYYY-MM-DD" as local date — avoids UTC/timezone shift
+// Must match dashboard's calcDaysLeft logic exactly
+function parseDateLocal(dateStr: string): Date {
+  const parts = String(dateStr).split('-')
+  return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]))
+}
+
+function calcDaysLeft(dateStr: string, now: Date): number {
+  const exp = parseDateLocal(dateStr)
+  return Math.ceil((exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+}
+
 function getPeriodStart(period: string): Date {
   const now = new Date(); now.setHours(0, 0, 0, 0)
   if (period === 'Daily') { const d = new Date(now); d.setDate(d.getDate() - 6); return d }
@@ -66,19 +78,20 @@ export async function GET(req: Request) {
     const allInventory = await inventoryCol?.find({ userId: session.userId }).toArray() || []
     const now = new Date(); now.setHours(0, 0, 0, 0)
 
-    const safeItems    = allInventory.filter(i => { const d = Math.ceil((new Date(i.expirationDate).getTime() - now.getTime()) / 86400000); return d > 2 })
-    const almostItems  = allInventory.filter(i => { const d = Math.ceil((new Date(i.expirationDate).getTime() - now.getTime()) / 86400000); return d >= 0 && d <= 2 })
-    const expiredItems = allInventory.filter(i => new Date(i.expirationDate) < now)
+    // Use same logic as dashboard: split-based local date, d < 0 expired, d <= 3 almost
+    const safeItems    = allInventory.filter(i => { const d = calcDaysLeft(i.expirationDate, now); return d > 3 })
+    const almostItems  = allInventory.filter(i => { const d = calcDaysLeft(i.expirationDate, now); return d >= 0 && d <= 3 })
+    const expiredItems = allInventory.filter(i => calcDaysLeft(i.expirationDate, now) < 0)
     const urgentItems  = almostItems.slice(0, 5).map(i => i.name)
 
-    // Category health breakdown — for stacked bar insight chart
+    // Category health breakdown — synced thresholds
     const catHealthMap: Record<string, { safe: number; expiring: number; expired: number }> = {}
     allInventory.forEach(item => {
       const cat = item.category || 'Other'
       if (!catHealthMap[cat]) catHealthMap[cat] = { safe: 0, expiring: 0, expired: 0 }
-      const d = Math.ceil((new Date(item.expirationDate).getTime() - now.getTime()) / 86400000)
+      const d = calcDaysLeft(item.expirationDate, now)
       if (d < 0) catHealthMap[cat].expired++
-      else if (d <= 2) catHealthMap[cat].expiring++
+      else if (d <= 3) catHealthMap[cat].expiring++
       else catHealthMap[cat].safe++
     })
     const categoryHealth = Object.entries(catHealthMap)

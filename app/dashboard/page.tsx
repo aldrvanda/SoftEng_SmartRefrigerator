@@ -84,8 +84,10 @@ export default function DashboardPage() {
   const totalItems = items.length
   const expiringSoon = items.filter(i => i.status === 'almost').length
   const expired = items.filter(i => i.status === 'expired').length
+  
+  // 1. MODIFIKASI LOGIKA: Mengubah filter menjadi <= 3 hari
   const priorityItems = items
-    .filter(i => i.status === 'expired' || (i.status === 'almost' && i.daysLeft <= 2))
+    .filter(i => i.status === 'expired' || (i.status === 'almost' && i.daysLeft <= 3))
     .sort((a, b) => a.daysLeft - b.daysLeft)
     .slice(0, 4)
 
@@ -122,7 +124,8 @@ export default function DashboardPage() {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h2 style={{ fontFamily: PP, fontSize: '15px', fontWeight: 600 }}>Priority Attention</h2>
-              <p style={{ fontFamily: PP, fontSize: '12px', color: '#8a8070', marginTop: '2px' }}>Item kadaluarsa atau habis dalam 2 hari.</p>
+              {/* 2. MODIFIKASI TEKS UI: Mengubah teks deskripsi menjadi 3 hari */}
+              <p style={{ fontFamily: PP, fontSize: '12px', color: '#8a8070', marginTop: '2px' }}>Item kadaluarsa atau habis dalam 3 hari.</p>
             </div>
           </div>
           {loading ? (
