@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import AppLayout from '@/components/layout/AppLayout'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend } from 'recharts'
 import { PackageOpen, Download } from 'lucide-react'
+export const dynamic = 'force-dynamic'
 
 const PP = "'Poppins', sans-serif"
 type Period = 'Daily' | 'Weekly' | 'Monthly'

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getCollection } from '@/lib/db'
 import { cookies } from 'next/headers'
+export const dynamic = 'force-dynamic'
 
 async function getSessionUser() {
   const cookieStore = await cookies()
