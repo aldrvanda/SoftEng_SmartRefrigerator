@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getCollection } from '@/lib/db'
 import { cookies } from 'next/headers'
-export const dynamic = 'force-dynamic'
 
 async function getSessionUser() {
   const cookieStore = await cookies()
@@ -11,16 +10,23 @@ async function getSessionUser() {
   return await sessions?.findOne({ token, expiresAt: { $gt: new Date() } }) ?? null
 }
 
-// Parses "YYYY-MM-DD" as local date — avoids UTC/timezone shift
-// Must match dashboard's calcDaysLeft logic exactly
-function parseDateLocal(dateStr: string): Date {
-  const parts = String(dateStr).split('-')
-  return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]))
+// Returns today's date as "YYYY-MM-DD" in WIB (Asia/Jakarta, UTC+7).
+// Vercel servers run UTC — using Intl.DateTimeFormat is the correct, DST-safe fix.
+// en-CA locale formats as YYYY-MM-DD which is exactly what we need.
+function getTodayStr(): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date())
 }
 
-function calcDaysLeft(dateStr: string, now: Date): number {
-  const exp = parseDateLocal(dateStr)
-  return Math.ceil((exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+// Computes calendar-day difference between an expiration date string and today.
+// Pure integer arithmetic — no floating point, no timezone offset issues.
+// Positive = future (not expired), 0 = expires today, negative = already expired.
+function calcDaysLeft(expirationDateStr: string, todayStr: string): number {
+  const [ey, em, ed] = String(expirationDateStr).split('-').map(Number)
+  const [ty, tm, td] = todayStr.split('-').map(Number)
+  // Date.UTC ensures both sides are compared at the same UTC midnight reference
+  const expMs = Date.UTC(ey, em - 1, ed)
+  const todMs = Date.UTC(ty, tm - 1, td)
+  return Math.round((expMs - todMs) / (1000 * 60 * 60 * 24))
 }
 
 function getPeriodStart(period: string): Date {
@@ -79,10 +85,13 @@ export async function GET(req: Request) {
     const allInventory = await inventoryCol?.find({ userId: session.userId }).toArray() || []
     const now = new Date(); now.setHours(0, 0, 0, 0)
 
-    // Use same logic as dashboard: split-based local date, d < 0 expired, d <= 3 almost
-    const safeItems    = allInventory.filter(i => { const d = calcDaysLeft(i.expirationDate, now); return d > 3 })
-    const almostItems  = allInventory.filter(i => { const d = calcDaysLeft(i.expirationDate, now); return d >= 0 && d <= 3 })
-    const expiredItems = allInventory.filter(i => calcDaysLeft(i.expirationDate, now) < 0)
+    // todayStr is always WIB-correct regardless of server timezone (Vercel = UTC)
+    const todayStr = getTodayStr()
+
+    // Thresholds match dashboard: d < 0 expired, 0 <= d <= 3 almost, d > 3 safe
+    const safeItems    = allInventory.filter(i => { const d = calcDaysLeft(i.expirationDate, todayStr); return d > 3 })
+    const almostItems  = allInventory.filter(i => { const d = calcDaysLeft(i.expirationDate, todayStr); return d >= 0 && d <= 3 })
+    const expiredItems = allInventory.filter(i => calcDaysLeft(i.expirationDate, todayStr) < 0)
     const urgentItems  = almostItems.slice(0, 5).map(i => i.name)
 
     // Category health breakdown — synced thresholds
@@ -90,7 +99,7 @@ export async function GET(req: Request) {
     allInventory.forEach(item => {
       const cat = item.category || 'Other'
       if (!catHealthMap[cat]) catHealthMap[cat] = { safe: 0, expiring: 0, expired: 0 }
-      const d = calcDaysLeft(item.expirationDate, now)
+      const d = calcDaysLeft(item.expirationDate, todayStr)
       if (d < 0) catHealthMap[cat].expired++
       else if (d <= 3) catHealthMap[cat].expiring++
       else catHealthMap[cat].safe++
