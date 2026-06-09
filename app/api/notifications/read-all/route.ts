@@ -14,13 +14,8 @@ export async function POST() {
   try {
     const session = await getSessionUser()
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
     const col = await getCollection('notifications')
-    await col?.updateMany(
-      { userId: session.userId, read: false },
-      { $set: { read: true } }
-    )
-
+    await col?.updateMany({ userId: session.userId, read: false }, { $set: { read: true } })
     return NextResponse.json({ success: true })
   } catch (err) {
     console.error('[POST /api/notifications/read-all]', err)

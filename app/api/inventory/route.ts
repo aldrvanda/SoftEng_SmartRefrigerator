@@ -31,18 +31,22 @@ export async function POST(req: Request) {
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const body = await req.json()
-    const { name, category, quantity, unit, purchaseDate, expirationDate, icon } = body
-    if (!name || !expirationDate) return NextResponse.json({ error: 'Name and expiration date are required' }, { status: 400 })
+    const { name, category, quantity, unit, purchaseDate, expirationDate, price } = body
+    if (!name || !expirationDate) {
+      return NextResponse.json({ error: 'Name and expiration date are required' }, { status: 400 })
+    }
 
     const col = await getCollection('inventory')
     const result = await col?.insertOne({
       userId: session.userId,
-      name, category: category || 'Other',
+      name,
+      category: category || 'Other',
       quantity: Number(quantity) || 0,
       unit: unit || 'pcs',
       purchaseDate: purchaseDate || new Date().toISOString().split('T')[0],
       expirationDate,
-      icon: icon || '🥗',
+      // price in IDR — user-supplied, used for financial impact in waste report
+      price: price ? Number(price) : null,
       createdAt: new Date(),
     })
     return NextResponse.json({ success: true, id: result?.insertedId })

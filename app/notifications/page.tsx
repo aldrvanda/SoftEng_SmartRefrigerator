@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import AppLayout from '@/components/layout/AppLayout'
 import { useRouter } from 'next/navigation'
 
@@ -21,37 +21,34 @@ export default function NotificationsPage() {
   const [notifs, setNotifs] = useState<Notification[]>([])
   const [loading, setLoading] = useState(true)
 
-  const fetchNotifs = () => {
+  const fetchNotifs = useCallback(() => {
     fetch('/api/notifications')
       .then(r => r.json())
       .then(data => setNotifs(data.notifications || []))
       .catch(() => setNotifs([]))
       .finally(() => setLoading(false))
-  }
-
-  useEffect(() => {
-    fetchNotifs()
-
-    // Mark all as read after 1.5s so user has time to see the badge drop
-    const timer = setTimeout(() => {
-      markAllRead()
-    }, 1500)
-
-    return () => clearTimeout(timer)
   }, [])
 
-  const markAllRead = async () => {
-    // Update local state immediately so badge in navbar reacts
-    setNotifs(prev => prev.map(n => ({ ...n, read: true })))
+  useEffect(() => { fetchNotifs() }, [fetchNotifs])
 
-    // Persist each unread to the API
+  const markOneRead = async (id: string) => {
+    setNotifs(prev => prev.map(n => n._id === id ? { ...n, read: true } : n))
     try {
-      await fetch('/api/notifications/read-all', { method: 'POST' })
-    } catch {}
+      await fetch('/api/notifications', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      })
+    } catch { /* silent */ }
+  }
+
+  const markAllRead = async () => {
+    setNotifs(prev => prev.map(n => ({ ...n, read: true })))
+    try { await fetch('/api/notifications/read-all', { method: 'POST' }) } catch { /* silent */ }
   }
 
   const unread = notifs.filter(n => !n.read)
-  const read = notifs.filter(n => n.read)
+  const read   = notifs.filter(n => n.read)
 
   const iconMap: Record<string, string> = {
     warning: 'https://img.icons8.com/ios-filled/20/dc2626/error--v1.png',
@@ -59,30 +56,28 @@ export default function NotificationsPage() {
     info:    'https://img.icons8.com/ios/20/3d5429/info--v1.png',
   }
 
-  const bgMap: Record<string, string> = {
-    expired: '#fff1f0',
-    almost:  '#fef9ec',
-    info:    '#f4f7f0',
-  }
-
   const NotifCard = ({ n }: { n: Notification }) => (
     <div
       className="flex items-start gap-4 px-5 py-4 transition-colors hover:bg-gray-50 cursor-pointer"
       style={{
         borderBottom: '1px solid #f0ece0',
-        background: n.read ? 'white' : bgMap[n.type] || '#f4f7f0',
+        background: n.read ? 'white'
+          : n.type === 'expired' ? '#fff1f0'
+          : n.type === 'almost'  ? '#fef9ec'
+          : '#f4f7f0',
       }}
-      onClick={() => router.push('/inventory')}
+      onClick={() => {
+        if (!n.read) markOneRead(n._id)
+        router.push('/inventory')
+      }}
     >
-      <div
-        className="flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center mt-0.5"
+      <div className="flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center mt-0.5"
         style={{
           background: n.read ? '#f0ece0'
             : n.type === 'expired' ? '#fee2e2'
             : n.type === 'almost'  ? '#fef3c7'
             : '#e6eddc',
-        }}
-      >
+        }}>
         <img src={iconMap[n.icon] || iconMap.info} alt="" width={18} height={18} />
       </div>
       <div className="flex-1 min-w-0">
@@ -90,32 +85,40 @@ export default function NotificationsPage() {
           <p style={{ fontFamily: PP, fontSize: '13px', fontWeight: n.read ? 400 : 600, color: '#1a1a14' }}>
             {n.title}
           </p>
-          {!n.read && (
-            <span className="flex-shrink-0 w-2 h-2 rounded-full" style={{ background: '#3d5429' }} />
-          )}
+          {!n.read && <span className="flex-shrink-0 w-2 h-2 rounded-full" style={{ background: '#dc2626' }} />}
         </div>
         <p style={{ fontFamily: PP, fontSize: '12px', color: '#8a8070', marginTop: '2px', lineHeight: 1.5 }}>
           {n.body}
         </p>
+        {/* Timestamp intentionally removed */}
       </div>
     </div>
   )
 
   return (
     <AppLayout>
-      <div className="max-w-2xl mx-auto">
-        <div className="mb-8 animate-slide-up">
-          <h1 style={{ fontFamily: PP, fontSize: '1.75rem', fontWeight: 700, color: '#1a1a14', marginBottom: '4px' }}>
-            Notifications
-          </h1>
-          <p style={{ fontFamily: PP, fontSize: '13px', color: '#8a8070' }}>
-            Stay on top of your kitchen's expiration alerts.
-          </p>
+      <div className="max-w-2xl mx-auto px-0">
+        <div className="flex items-start justify-between mb-8 animate-slide-up">
+          <div>
+            <h1 style={{ fontFamily: PP, fontSize: 'clamp(1.3rem,5vw,1.75rem)', fontWeight: 700, color: '#1a1a14', marginBottom: '4px' }}>
+              Notifications
+            </h1>
+            <p style={{ fontFamily: PP, fontSize: '13px', color: '#8a8070' }}>
+              Pantau peringatan kadaluarsa bahan makananmu.
+            </p>
+          </div>
+          {unread.length > 0 && (
+            <button onClick={markAllRead}
+              className="px-4 py-2 rounded-xl transition-all hover:opacity-80 flex-shrink-0"
+              style={{ fontFamily: PP, fontSize: '13px', fontWeight: 500, background: '#f0ece0', color: '#6b6356' }}>
+              Mark all read
+            </button>
+          )}
         </div>
 
         {loading ? (
           <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid #e0dbc8', background: 'white' }}>
-            {[1,2,3,4].map(i => (
+            {[1, 2, 3, 4].map(i => (
               <div key={i} className="flex items-center gap-4 px-5 py-4" style={{ borderBottom: '1px solid #f0ece0' }}>
                 <div className="w-9 h-9 rounded-xl animate-pulse" style={{ background: '#f0ece0' }} />
                 <div className="flex-1 space-y-2">
@@ -130,11 +133,9 @@ export default function NotificationsPage() {
             style={{ border: '1px solid #e0dbc8', background: 'white' }}>
             <img src="https://img.icons8.com/ios/48/adc491/appointment-reminders--v1.png" alt="" width={48} height={48} />
             <div className="text-center">
-              <p style={{ fontFamily: PP, fontSize: '14px', fontWeight: 600, color: '#1a1a14', marginBottom: '4px' }}>
-                You're all caught up!
-              </p>
-              <p style={{ fontFamily: PP, fontSize: '13px', color: '#9a9080' }}>
-                No notifications right now. Add items to your inventory to get expiry alerts.
+              <p style={{ fontFamily: PP, fontSize: '14px', fontWeight: 600, color: '#1a1a14', marginBottom: '4px' }}>All caught up</p>
+              <p style={{ fontFamily: PP, fontSize: '13px', color: '#9a9080', maxWidth: '260px' }}>
+                Belum ada notifikasi. Tambahkan item ke inventory untuk mendapat peringatan.
               </p>
             </div>
           </div>
