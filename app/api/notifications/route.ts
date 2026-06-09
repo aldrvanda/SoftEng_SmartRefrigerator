@@ -10,16 +10,20 @@ async function getSessionUser() {
   return await sessions?.findOne({ token, expiresAt: { $gt: new Date() } }) ?? null
 }
 
-// Shared helper — parses "YYYY-MM-DD" as local date (no timezone shift)
-function parseDateLocal(dateStr: string): Date {
-  const parts = String(dateStr).split('-')
-  return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]))
+// Returns today's date as "YYYY-MM-DD" in WIB (Asia/Jakarta, UTC+7).
+// Vercel servers run UTC — Intl.DateTimeFormat is the correct, DST-safe fix.
+function getTodayStr(): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date())
 }
 
-// Matches dashboard: d < 0 → expired, d <= 3 → almost, else safe
-function calcDaysLeft(dateStr: string, now: Date): number {
-  const exp = parseDateLocal(dateStr)
-  return Math.ceil((exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+// Computes calendar-day difference — pure integer math, no timezone issues.
+// Positive = future (not expired), 0 = expires today, negative = already expired.
+function calcDaysLeft(expirationDateStr: string, todayStr: string): number {
+  const [ey, em, ed] = String(expirationDateStr).split('-').map(Number)
+  const [ty, tm, td] = todayStr.split('-').map(Number)
+  const expMs = Date.UTC(ey, em - 1, ed)
+  const todMs = Date.UTC(ty, tm - 1, td)
+  return Math.round((expMs - todMs) / (1000 * 60 * 60 * 24))
 }
 
 export async function GET() {
@@ -30,14 +34,13 @@ export async function GET() {
     const inventoryCol = await getCollection('inventory')
     const items = await inventoryCol?.find({ userId: session.userId }).toArray() || []
 
-    const now = new Date()
-    now.setHours(0, 0, 0, 0)
-
+    // todayStr is WIB-correct regardless of server timezone (Vercel = UTC)
+    const todayStr = getTodayStr()
     const notifCol = await getCollection('notifications')
 
     // Upsert auto-notifications — preserves existing read state via $setOnInsert
     for (const item of items) {
-      const daysLeft = calcDaysLeft(item.expirationDate, now)
+      const daysLeft = calcDaysLeft(item.expirationDate, todayStr)
       const autoId = `auto_${item._id}`
 
       if (daysLeft < 0) {
@@ -45,7 +48,7 @@ export async function GET() {
         await notifCol?.updateOne(
           { _id: autoId, userId: session.userId },
           {
-            $setOnInsert: { read: false, createdAt: now },
+            $setOnInsert: { read: false, createdAt: new Date() },
             $set: {
               type: 'expired',
               title: `${item.name} has expired`,
@@ -65,7 +68,7 @@ export async function GET() {
         await notifCol?.updateOne(
           { _id: autoId, userId: session.userId },
           {
-            $setOnInsert: { read: false, createdAt: now },
+            $setOnInsert: { read: false, createdAt: new Date() },
             $set: {
               type: 'almost',
               title: `${item.name} expires ${when}`,
