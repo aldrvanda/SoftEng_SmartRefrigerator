@@ -53,6 +53,31 @@ function priorityLabel(daysLeft: number, status: string) {
   return `Expires in ${daysLeft}d`
 }
 
+function getSmartInsightMessage(
+  expiredCount: number,
+  almostCount: number,
+  totalItems: number
+): string {
+  // Kasus 1: Inventaris kosong
+  if (totalItems === 0) {
+    return 'Inventaris kosong. Tambahkan bahan untuk mulai melacak kadaluarsa.'
+  }
+  // Kasus 2: Ada item expired DAN hampir expired
+  if (expiredCount > 0 && almostCount > 0) {
+    return `${expiredCount} item sudah kadaluarsa dan ${almostCount} item akan segera habis. Segera cek dan bersihkan inventarismu.`
+  }
+  // Kasus 3: Hanya ada item expired
+  if (expiredCount > 0) {
+    return `${expiredCount} item sudah kadaluarsa. Segera buang atau cek kondisinya sebelum digunakan.`
+  }
+  // Kasus 4: Hanya ada item hampir expired (masih bisa digunakan)
+  if (almostCount > 0) {
+    return `${almostCount} item akan segera habis. Cek resep untuk menghabiskannya sebelum basi.`
+  }
+  // Kasus 5: Semua aman
+  return 'Inventaris terlihat segar! Semua bahan masih aman saat ini.'
+}
+
 function EmptyState({ message }: { message: string }) {
   return (
     <div className="flex flex-col items-center justify-center py-10 gap-3 px-4">
@@ -84,12 +109,36 @@ export default function DashboardPage() {
   const totalItems = items.length
   const expiringSoon = items.filter(i => i.status === 'almost').length
   const expired = items.filter(i => i.status === 'expired').length
-  
-  // 1. MODIFIKASI LOGIKA: Mengubah filter menjadi <= 3 hari
+
+  // Count REAL (sebelum slice) — digunakan untuk Smart Insight agar akurat
+  const expiredCount = items.filter(i => i.status === 'expired').length
+  const almostCount = items.filter(i => i.status === 'almost').length
+
+  // priorityItems untuk kartu Priority Attention (max 4 tampil)
+  // Urutkan: expired dulu (daysLeft negatif terkecil = paling lama expired), lalu almost
   const priorityItems = items
-    .filter(i => i.status === 'expired' || (i.status === 'almost' && i.daysLeft <= 3))
+    .filter(i => i.status === 'expired' || i.status === 'almost')
     .sort((a, b) => a.daysLeft - b.daysLeft)
     .slice(0, 4)
+
+  // Tombol Smart Insight: arahkan ke inventory jika ada expired, ke recipes jika hanya almost, ke inventory jika kosong
+  const insightRoute = totalItems === 0
+    ? '/inventory'
+    : expiredCount > 0
+    ? '/inventory'
+    : '/recipes'
+
+  const insightButtonLabel = totalItems === 0
+    ? 'Add First Item'
+    : expiredCount > 0
+    ? 'Check Inventory'
+    : 'Browse Recipes'
+
+  const insightButtonIcon = totalItems === 0
+    ? 'https://img.icons8.com/ios/14/3d5429/add-list.png'
+    : expiredCount > 0
+    ? 'https://img.icons8.com/ios/14/3d5429/error--v1.png'
+    : 'https://img.icons8.com/ios/14/3d5429/cooking-book.png'
 
   return (
     <AppLayout>
@@ -124,7 +173,6 @@ export default function DashboardPage() {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h2 style={{ fontFamily: PP, fontSize: '15px', fontWeight: 600 }}>Priority Attention</h2>
-              {/* 2. MODIFIKASI TEKS UI: Mengubah teks deskripsi menjadi 3 hari */}
               <p style={{ fontFamily: PP, fontSize: '12px', color: '#8a8070', marginTop: '2px' }}>Item kadaluarsa atau habis dalam 3 hari.</p>
             </div>
           </div>
@@ -166,18 +214,17 @@ export default function DashboardPage() {
               <p style={{ fontFamily: PP, fontSize: '13px', fontWeight: 600 }}>Smart Insight</p>
             </div>
             <p style={{ fontFamily: PP, fontSize: '12px', lineHeight: 1.6, opacity: 0.9 }}>
-              {priorityItems.length > 0
-                ? `${priorityItems.length} item perlu segera digunakan. Cek resep untuk menghabiskannya sebelum basi.`
-                : totalItems === 0
-                ? 'Inventaris kosong. Tambahkan bahan untuk mulai melacak kadaluarsa.'
-                : 'Inventaris terlihat segar! Semua masih aman saat ini.'}
+              {loading
+                ? '...'
+                : getSmartInsightMessage(expiredCount, almostCount, totalItems)}
             </p>
           </div>
-          <button onClick={() => router.push(totalItems === 0 ? '/inventory' : '/recipes')}
+          <button
+            onClick={() => router.push(insightRoute)}
             className="mt-4 w-full py-2.5 rounded-xl flex items-center justify-center gap-2 transition-all hover:opacity-90"
             style={{ background: 'white', color: '#3d5429', fontFamily: PP, fontSize: '13px', fontWeight: 600 }}>
-            <img src="https://img.icons8.com/ios/14/3d5429/cooking-book.png" alt="" width={14} height={14} />
-            {totalItems === 0 ? 'Add First Item' : 'Browse Recipes'}
+            <img src={insightButtonIcon} alt="" width={14} height={14} />
+            {insightButtonLabel}
           </button>
         </div>
       </div>
